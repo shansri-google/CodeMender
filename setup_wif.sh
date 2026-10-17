@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Ensure gcloud is in PATH
-export PATH="$PATH:/usr/local/google/home/rgaut/google-cloud-sdk/bin"
-
 # Workload Identity Federation (WIF) Setup Script for Google Cloud & GitHub Actions
-# Target Repository: rgaut-create/CodeMender
+# Target Repository: shansri-google/CodeMender
 
 if [ $# -lt 1 ]; then
     echo "Usage: ./setup_wif.sh <YOUR_GCP_PROJECT_ID>"
@@ -14,7 +11,7 @@ if [ $# -lt 1 ]; then
 fi
 
 PROJECT_ID="$1"
-REPO="rgaut-create/CodeMender"
+REPO="shansri-google/CodeMender"
 POOL_NAME="github-codemender-pool"
 PROVIDER_NAME="github-codemender-provider"
 SA_NAME="codemender-cicd-sa"
@@ -64,7 +61,7 @@ echo "==========================================================================
 echo "🎉 WIF SETUP SUCCESSFUL!"
 echo ""
 echo "Navigate to GitHub Secrets Settings:"
-echo "👉 https://github.com/rgaut-create/CodeMender/settings/secrets/actions"
+echo "👉 https://github.com/shansri-google/CodeMender/settings/secrets/actions"
 echo ""
 echo "Add the following 3 Repository Secrets:"
 echo "--------------------------------------------------------------------------"

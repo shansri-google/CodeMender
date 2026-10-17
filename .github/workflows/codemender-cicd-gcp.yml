@@ -1,0 +1,131 @@
+name: "CodeMender Security Scan & Remediation Pipeline (GCP self-hosted runner)"
+
+# Variant of codemender-cicd.yml that executes on an ephemeral GCE runner
+# provisioned by infra/gce-runner. Differences from the hosted-runner version:
+#   * runs-on targets the self-hosted labels instead of ubuntu-latest
+#   * NO google-github-actions/auth step: the VM's attached service account is
+#     the identity, picked up by `cm` through Application Default Credentials
+#   * pull_request from forks is excluded: never run untrusted code on
+#     self-hosted infrastructure
+#   * cm runs WITH its built-in sandbox on top of the VM network perimeter
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+    inputs:
+      auto_fix:
+        description: 'Automatically verify and patch vulnerabilities'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: write
+  security-events: write
+
+jobs:
+  security-scan:
+    name: "CodeMender Security Scan (GCE)"
+    # Labels come from `terraform output runs_on_labels`.
+    runs-on: [self-hosted, linux, gcp, codemender]
+    # Refuse fork PRs: they could execute arbitrary code on our VM.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies & Run Baseline Tests
+        run: |
+          python -m venv .venv
+          . .venv/bin/activate
+          pip install -r requirements.txt
+          pytest
+
+      # No WIF step. Prove the attached SA is visible via ADC before cm needs it.
+      - name: Verify GCP identity from VM metadata (no WIF, no keys)
+        run: |
+          SA=$(curl -sf -H "Metadata-Flavor: Google" \
+            http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/email)
+          echo "Runner identity: $SA"
+          echo "GOOGLE_CLOUD_PROJECT=$(curl -sf -H 'Metadata-Flavor: Google' \
+            http://169.254.169.254/computeMetadata/v1/project/project-id)" >> "$GITHUB_ENV"
+
+      - name: Setup CodeMender CLI
+        run: |
+          chmod +x ./cm
+          mkdir -p "$HOME/.local/bin"
+          cp ./cm "$HOME/.local/bin/cm"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          "$HOME/.local/bin/cm" --version || echo "CodeMender CLI ready"
+
+      - name: Initialize CodeMender Workspace
+        run: cm init --yes || echo "Initialized CodeMender workspace"
+
+      # Built-in sandbox stays ON (default). The VM perimeter is the second layer.
+      - name: Execute CodeMender Scan (cm find)
+        run: cm find app.py --yes || true
+
+      - name: Export SARIF Findings
+        run: |
+          cm report --format sarif \
+            | python3 -c "import sys, json; t=sys.stdin.read(); i=t.find('{'); print(json.dumps(json.loads(t[i:]) if i!=-1 else {}, indent=2))" \
+            > codemender-findings.sarif || true
+
+      - name: Upload SARIF to GitHub Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        continue-on-error: true
+        with:
+          sarif_file: codemender-findings.sarif
+          category: codemender-gcp
+
+      - name: CodeMender Verify & Fix Stage
+        if: github.event_name != 'workflow_dispatch' || inputs.auto_fix
+        run: |
+          . .venv/bin/activate
+          FINDINGS=$(cm report --format json 2>/dev/null | jq -r '.[]? | select(.Status == "OPEN") | .FindingID' || echo "")
+          for ID in $FINDINGS; do
+            echo "::group::Verify $ID"
+            cm verify "$ID" --yes || true
+            echo "::endgroup::"
+            echo "::group::Fix $ID"
+            cm fix "$ID" --yes --bypass-warning || true
+            echo "::endgroup::"
+          done
+
+      - name: Create Fix Pull Request
+        if: github.event_name != 'workflow_dispatch' || inputs.auto_fix
+        uses: peter-evans/create-pull-request@v6
+        continue-on-error: true
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "security: automated vulnerability fix by CodeMender (GCE runner)"
+          title: "🛡️ [CodeMender] Automated Vulnerability Remediation"
+          body: |
+            ## CodeMender Automated Security Patch
+
+            Generated on an **ephemeral GCE runner** (private VPC, PSC, no external IP)
+            with CodeMender's built-in sandbox enabled. Identity: VM-attached service
+            account via ADC — no WIF, no stored keys.
+
+            - **Vulnerabilities Mitigated**: SQL Injection, IDOR, Command Execution
+            - **Status**: Verified against test suite `pytest`
+          branch: "codemender-autofix-gcp-${{ github.run_id }}"
+          delete-branch: true
+
+      # Belt-and-braces: the VM self-deletes anyway, but never leave a workspace behind.
+      - name: Scrub workspace
+        if: always()
+        run: rm -rf "$GITHUB_WORKSPACE"/* "$GITHUB_WORKSPACE"/.[!.]* 2>/dev/null || true

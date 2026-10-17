@@ -82,6 +82,6 @@ sequenceDiagram
 
 - **Vulnerable Application Code**: [`app.py`](./app.py) (Contains SQL Injection, IDOR, and RCE)
 - **Pytest Unit Test Suite**: [`test_app.py`](./test_app.py)
-- **GitHub Code Scanning Alerts**: [Security $\rightarrow$ Code scanning](https://github.com/rgaut-create/CodeMender/security/code-scanning)
-- **Automated Fix Pull Request**: [Pull Requests $\rightarrow$ PR #1](https://github.com/rgaut-create/CodeMender/pull/1)
+- **GitHub Code Scanning Alerts**: [Security $\rightarrow$ Code scanning](https://github.com/shansri-google/CodeMender/security/code-scanning)
+- **Automated Fix Pull Request**: [Pull Requests $\rightarrow$ PR #1](https://github.com/shansri-google/CodeMender/pull/1)
 - **CI/CD Workflow Config**: [`.github/workflows/codemender-cicd.yml`](./.github/workflows/codemender-cicd.yml)

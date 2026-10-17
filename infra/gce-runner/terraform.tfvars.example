@@ -1,0 +1,11 @@
+project_id  = "my-gcp-security-project"
+region      = "us-central1"
+zone        = "us-central1-a"
+github_repo = "shansri-google/CodeMender"
+
+# Warm ephemeral runners kept ready by the MIG. 1 is enough for a demo.
+runner_count = 1
+machine_type = "e2-standard-4"
+
+# Tighten later by fronting with Secure Web Proxy and listing only its IP here.
+# egress_allow_cidrs = ["10.10.0.250/32"]
