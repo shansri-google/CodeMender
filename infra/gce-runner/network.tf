@@ -10,7 +10,7 @@ resource "google_compute_network" "runner" {
 resource "google_compute_subnetwork" "runner" {
   name                     = "codemender-runner-subnet"
   region                   = var.region
-  network                  = google_compute_network.runner.id
+  network                  = google_compute_network.runner.self_link
   ip_cidr_range            = var.subnet_cidr
   private_ip_google_access = true
 
@@ -30,14 +30,14 @@ resource "google_compute_global_address" "psc_apis" {
   purpose      = "PRIVATE_SERVICE_CONNECT"
   address_type = "INTERNAL"
   address      = var.psc_endpoint_ip
-  network      = google_compute_network.runner.id
+  network      = google_compute_network.runner.self_link
 }
 
 resource "google_compute_global_forwarding_rule" "psc_apis" {
   # PSC-for-Google-APIs names must be 1-20 chars, lowercase letters + digits only.
   name                  = "cmpscapis"
   target                = "all-apis"
-  network               = google_compute_network.runner.id
+  network               = google_compute_network.runner.self_link
   ip_address            = google_compute_global_address.psc_apis.id
   load_balancing_scheme = ""
 }
@@ -51,7 +51,7 @@ resource "google_dns_managed_zone" "googleapis" {
 
   private_visibility_config {
     networks {
-      network_url = google_compute_network.runner.id
+      network_url = google_compute_network.runner.self_link
     }
   }
 }
@@ -79,7 +79,7 @@ resource "google_dns_record_set" "googleapis_wildcard" {
 resource "google_compute_router" "runner" {
   name    = "codemender-runner-router"
   region  = var.region
-  network = google_compute_network.runner.id
+  network = google_compute_network.runner.self_link
 }
 
 resource "google_compute_router_nat" "runner" {

@@ -22,19 +22,9 @@ resource "google_project_iam_member" "runner_roles" {
 
 # Ephemeral runners delete themselves after one job so the MIG replaces them
 # with a clean VM. Scope that power to instances with our own name prefix.
-resource "google_project_iam_custom_role" "self_delete" {
-  role_id     = "codemenderRunnerSelfDelete"
-  title       = "CodeMender runner self-delete"
-  description = "Lets an ephemeral runner VM delete itself after a job"
-  permissions = [
-    "compute.instances.get",
-    "compute.instances.delete",
-  ]
-}
-
 resource "google_project_iam_member" "runner_self_delete" {
   project = var.project_id
-  role    = google_project_iam_custom_role.self_delete.id
+  role    = "roles/compute.instanceAdmin.v1"
   member  = "serviceAccount:${google_service_account.runner.email}"
 
   condition {
@@ -84,7 +74,7 @@ resource "google_compute_instance_template" "runner" {
   }
 
   network_interface {
-    subnetwork = google_compute_subnetwork.runner.id
+    subnetwork = google_compute_subnetwork.runner.self_link
     # Deliberately no access_config block => no external IP.
   }
 
